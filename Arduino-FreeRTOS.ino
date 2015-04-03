@@ -10,86 +10,53 @@
 #define BLUE_PIN 10
 
 // Priorities
-#define CPU_M_PRIORITY  4
 #define ADC_PRIORITY    3
 #define LCD_PRIORITY    2
 #define LED_PRIORITY    1
 
-// the counter that the cpu task increments
-volatile uint32_t count = 0;
 // the counter that the idle task increments
 unsigned long ulIdleCycleCount = 0UL;
 
 // Global for LCD to use
-float cpu_u = 0;
 float voltage = 0;
-bool ledstate[3] = {LOW};
-
-
-//------------------------------------------------------------------------------
-// the Utilization Monitor task, highest priority
-void Umonitor ( void *pvParameters )
-{
-	int count=0; // increased every second
-	float idleOP = 650085;	// pre-calculated idle operations per second without any other load on the CPU
-	float oper = 0, util = 0;
-	for( ;; )
-	{        
-		if(count !=0)	// prevents division by zero (first run)
-		{			
-			oper = idleOP - (ulIdleCycleCount/count);	// max idle operations in a second - idle operations in a second = NON idle operations in a second
-			util = (oper/idleOP)*100;		// percentage of current idle operations opposed to max idle operations is the utilization %
-                        if(util<0)
-                          util = 0;
-			Serial.print(F("CPU Utilization: ")); // print the utilization percentage
-                        Serial.println(util);
-                        //memset(data, 0, sizeof data);
-			if(util > 90.0)
-                          Serial.print(F("\n ****** \n WARNING: Utilization factor is higher than 90%%\n ****** \n")); // print a warning if the U% is higher than 90%
-			oper = 0;  // pass the utilization value to the global one for the LCD
-                        cpu_u = util;
-                        util = 0; // reset the U variables
-		}
-		vTaskDelay( 1000L * (configTICK_RATE_HZ) / 1000L) ; // runs every second
-		count++;	// increments the seconds count
-	}
-}
+byte rgbColour[3] = {255, 0, 0}; // the range is 0 - 255
+	
+// Functions prototypes
+void setColourRgb(unsigned int red, unsigned int green, unsigned int blue);
 
 //------------------------------------------------------------------------------
 // LED task
-static void vRGBLEDTask(void *pvParameters) {
+static void vRGBLEDTask(void *pvParameters) 
+{
+	// Task's variables
+	int decColour,incColour, i;
   
-  TickType_t xLastWakeTime;
-  const TickType_t xFrequency = (50L * configTICK_RATE_HZ) / 1000L;
-  // Initialise the xLastWakeTime variable with the current time.
-  xLastWakeTime = xTaskGetTickCount();
+	TickType_t xLastWakeTime;
+	const TickType_t xFrequency = (25L * configTICK_RATE_HZ) / 1000L;
+	// Initialize the xLastWakeTime variable with the current time.
+	xLastWakeTime = xTaskGetTickCount();
 
-  for (;;) {
-    // Switch LED on/off.
-    //ledstate = !ledstate; 
-    if(voltage<3)
-    {
-      ledstate[0] = HIGH;
-      ledstate[1] = HIGH;
-      ledstate[2] = LOW;
-    }
-    else if(voltage <4)
-    {
-      ledstate[0] = HIGH;
-      ledstate[1] = LOW;
-      ledstate[2] = HIGH;
-    }
-    else
-    {
-      ledstate[0] = LOW;
-      ledstate[1] = HIGH;
-      ledstate[2] = HIGH;
-    }
-    digitalWrite(RED_PIN, ledstate[0]);
-    digitalWrite(GREEN_PIN, ledstate[1]);
-    digitalWrite(BLUE_PIN, ledstate[2]);
-    // Sleep for 200 milliseconds.
-    vTaskDelayUntil( &xLastWakeTime, xFrequency );
+  for (;;) 
+  {
+	// Choose the colors to increment and decrement.
+	for (decColour = 0; decColour < 3; decColour += 1)
+	{
+	   incColour = decColour == 2 ? 0 : decColour + 1;
+	  
+	  // cross-fade the two colours.
+	  for (int i = 0; i < 255; i += 1) 
+	  {
+		  rgbColour[decColour] -= 1;
+		  rgbColour[incColour] += 1;
+		  
+		  setColourRgb(255 - rgbColour[0],255 - rgbColour[1],255 - rgbColour[2]);
+		  
+		  // Sleep for 5 milliseconds.
+		  vTaskDelayUntil( &xLastWakeTime, xFrequency );
+	  }
+	}
+
+
   }
 }
 
@@ -109,7 +76,8 @@ static void vLCDTask(void *pvParameters) {
   unsigned int minutes = 0, hours = 0;
 
   // Update the LCD every second
-  for (;;) {
+  for (;;) 
+  {
     LCDclear();
     
     // ADC display
@@ -117,33 +85,39 @@ static void vLCDTask(void *pvParameters) {
     ftosbuff = floatToString(num, voltage , 2);
     sprintf(data,"A0 = %s V",ftosbuff);
     LCDprint(data);
-    
-    // LED color display
+
+    // Runtime display   
     LCDgotoXY(0,1);
-    if(!ledstate[0])  // common anode RGB LED, negative logic
-      LCDprint("LED IS RED");
-     else if(!ledstate[1])
-       LCDprint("LED IS GREEN");
-      else
-        LCDprint("LED IS BLUE");
-        
-     // Runtime display   
-     LCDgotoXY(0,2);
-     count++;
-     seconds = count/2;
-     if(seconds>59)
+    count++;
+    seconds = count/2;
+    if(seconds>59)
      {
        minutes++;
        count = 0;
        seconds = count/2;
      }
-	 if(minutes>59)
+	if(minutes>59)
 	 {
 		hours++;
 		minutes = 0;
 	 } 
      sprintf(data,"%dh:%dm:%ds",hours,minutes,seconds);
      LCDprint(data);
+	 
+	 // LED color display
+	 LCDgotoXY(0,2);
+	 sprintf(data,"R:%d",rgbColour[0]);
+	 LCDprint(data);
+	 
+	 LCDgotoXY(0,3);
+	 sprintf(data,"G:%d",rgbColour[1]);
+	 LCDprint(data);
+	 
+	 LCDgotoXY(0,4);
+	 sprintf(data,"B:%d",rgbColour[2]);
+	 LCDprint(data);
+	 
+	 
     // Sleep for 0.5 second
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
   }
@@ -151,7 +125,8 @@ static void vLCDTask(void *pvParameters) {
 
 //------------------------------------------------------------------------------
 // ADC task
-static void vADC(void *pvParameters) {
+static void vADC(void *pvParameters) 
+{
   byte sensorPin = A0;    // select the input pin for the potentiometer
   int sensorValue = 0;  // variable to store the value coming from the sensor
   
@@ -211,4 +186,12 @@ void loop() {
     ulIdleCycleCount++;
     interrupts();
   }
+}
+
+// Set the value to each of the pins of the RGB LED
+void setColourRgb(unsigned int red, unsigned int green, unsigned int blue) 
+{
+	analogWrite(RED_PIN, red);
+	analogWrite(GREEN_PIN, green);
+	analogWrite(BLUE_PIN, blue);
 }

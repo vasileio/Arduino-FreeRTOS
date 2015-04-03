@@ -16,7 +16,6 @@
 #define __AVR__
 extern "C" void __cxa_pure_virtual() {;}
 
-void Umonitor ( void *pvParameters );
 static void vRGBLEDTask(void *pvParameters);
 static void vLCDTask(void *pvParameters);
 static void vADC(void *pvParameters);
