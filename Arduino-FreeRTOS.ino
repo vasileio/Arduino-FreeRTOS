@@ -141,11 +141,8 @@ static void vLCDTask(void *pvParameters) {
 	 {
 		hours++;
 		minutes = 0;
-	 }
-     if(seconds<=9)
-       sprintf(data,"Run: %d:0%d:%d",hours,minutes,seconds);
-     else
-       sprintf(data,"Run: %d:0%d:%d",hours,minutes,seconds);
+	 } 
+     sprintf(data,"%dh:%dm:%ds",hours,minutes,seconds);
      LCDprint(data);
     // Sleep for 0.5 second
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
